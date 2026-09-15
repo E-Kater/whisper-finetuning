@@ -19,6 +19,7 @@ librosa = "^0.10.0"
 jiwer = "^3.0.0"
 tensorboard = "^2.16.0"
 dvc = "^3.67.1"
+matplotlib = "^3.11.2"
 
 [[tool.poetry.source]]
 name = "pytorch-cu128"
