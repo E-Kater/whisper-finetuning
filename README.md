@@ -1,8 +1,11 @@
 
-# Whisper Fine-tuning with DeepSpeed ZeRO-Offload
+# Whisper Fine-tuning with DeepSpeed ZeRO-Offload and PyTorch FSDP2 CPU
+emulation
 
 Fine-tuning Whisper for Russian ASR on a single consumer GPU (RTX 5080 Laptop,
-16GB VRAM) using DeepSpeed ZeRO Stage 3 with CPU offload.
+16GB VRAM) using DeepSpeed ZeRO Stage 3 with CPU offload and PyTorch FSDP2 CPU
+emulation.
+
 
 ## Motivation
 
@@ -12,10 +15,57 @@ makes it possible to train a large audio model on one GPU — the same
 sharding mechanics used in multi-GPU training, but with CPU RAM instead of
 additional GPUs.
 
-The goal was to build a reproducible ASR fine-tuning pipeline and compare
-several training configurations (baseline, frozen encoder, ZeRO-1/2/3 with
-default and tuned communication buffers) in terms of VRAM usage, CPU RAM
-usage, training time, and WER.
+ This project explores **two approaches to distributed training**
+on limited hardware:
+
+1. **DeepSpeed ZeRO** (memory-centric): shards optimizer state, gradients,
+   and parameters across devices, with optional CPU offload.
+2. **PyTorch FSDP2** (PyTorch-native): shards parameters, gradients, and
+   optimizer using `fully_shard` and `DeviceMesh`.
+
+The goal was to build a reproducible ASR fine-tuning pipeline, compare
+several training configurations in terms of VRAM, CPU RAM, time, and WER,
+and **emulate multi-GPU behavior on a single GPU** using CPU offload and
+multi-process CPU sharding.
+
+## Experiment design
+
+### Real training on GPU (DeepSpeed ZeRO)
+
+All DeepSpeed runs were executed on a **single RTX 5080 (16GB VRAM)**:
+
+- **Baseline**: no offload, no sharding.
+- **Frozen encoder**: encoder weights frozen to prevent catastrophic
+  forgetting on small datasets.
+- **ZeRO-1 / ZeRO-2 / ZeRO-3**: progressive sharding of optimizer,
+  gradients, and parameters, each with **default** and **tuned**
+  communication buffers (`reduce_bucket_size`, `allgather_bucket_size`,
+  `stage3_prefetch_bucket_size`).
+- **Offload**: optimizer and parameters offloaded to CPU RAM via
+  `offload_optimizer` and `offload_param`.
+
+Each run: 3 epochs, 270 training samples, 30 eval samples, Whisper-small.
+Metrics: max VRAM, peak CPU RAM, training time, WER.
+
+### Multi-GPU emulation on CPU (FSDP2)
+
+Real multi-GPU FSDP requires one GPU per rank, so on a single-GPU machine
+it cannot be run directly. To still demonstrate the **sharding mechanics**,
+FSDP2 was emulated on **2, 3, 4, and 8 CPU processes** using `torchrun`
+and the `gloo` backend:
+
+- `init_device_mesh("cpu", (world_size,))` creates a CPU mesh.
+- `fully_shard(model, mesh=mesh)` shards parameters, gradients, and
+  optimizer across CPU ranks.
+- `DistributedSampler` splits the dataset across ranks.
+- Metrics: CPU RAM per stage (init, model load, FSDP wrap, training),
+  time per step, loss, and communication volume.
+
+This is **not** a real multi-GPU setup - it demonstrates the same
+sharding mechanics, but over `gloo` (CPU) instead of `nccl` (GPU), which
+makes it much slower and less scalable. The scaling study reveals where
+`gloo` becomes the bottleneck and explains why production FSDP uses
+`nccl` on GPUs with NVLink.
 
 ## Results
 
@@ -96,6 +146,34 @@ All fine-tuning runs use `freeze_encoder()` and `optim="adamw_torch"`.
 - OS: Linux (Ubuntu)
 - CUDA: 12.8 (system nvcc 12.9, minor mismatch tolerated via
   `DS_SKIP_CUDA_CHECK=1`)
+
+
+## FSDP2 CPU Emulation: Scaling Study (2–8 ranks)
+
+| World size | CPU RAM (FSDP wrap) | CPU RAM (training) | Time / 10 steps | Loss (step 10) |
+|---|---|---|---|---|
+| 2 | 7.80 GB | 11.40 GB | 63.7 s | 0.4840 |
+| 3 | 8.63 GB | 13.88 GB | 65.8 s | 0.6485 |
+| 4 | 9.68 GB | 15.97 GB | 68.5 s | 0.6032 |
+| 8 | 13.47 GB | 21.59 GB | 83.2 s | 1.1088 |
+
+**Key findings:**
+
+- **CPU RAM grows linearly with world size:** ~0.94 GB per rank for
+  FSDP buffers, ~2.28 GB per rank for training state. At 8 ranks, training
+  uses 21.59 GB — close to the limit of a 32 GB machine.
+- **Time per step increases with world size:** 6.4 s (2 ranks) → 8.3 s
+  (8 ranks), a 30% slowdown. This is due to gloo communication overhead.
+- **Loss degrades with more ranks:** 0.48 (2) → 1.11 (8). This is likely
+  because gloo's reduce-scatter uses `sum` instead of `average`, so
+  gradients scale with world size and training diverges.
+- **Limitation:** CPU emulation demonstrates sharding mechanics, not
+  real multi-GPU performance. Production FSDP uses NCCL on GPUs with
+  NVLink, which scales to hundreds of ranks with near-linear speedup.
+
+### FSDP2 CPU scaling
+
+![FSDP scaling](results/figures/fsdp_scaling.png)
 
 ## Stack
 

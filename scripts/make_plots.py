@@ -261,7 +261,104 @@ for i, (v, t) in enumerate(zip(vram_3, time_3)):
 plt.suptitle("Buffer tuning effect: VRAM vs Time", fontsize=13)
 plt.tight_layout()
 plt.savefig(OUT_DIR / "buffer_tuning.png", dpi=150)
+
+
+
+# FSDP scaling plot
+world_sizes = [2, 3, 4, 8]
+cpu_ram_train = [11.40, 13.88, 15.97, 21.59]
+time_per_10 = [63.7, 65.8, 68.5, 83.2]
+loss = [0.4840, 0.6485, 0.6032, 1.1088]
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+axes[0].plot(world_sizes, cpu_ram_train, 'o-', color='#e67e22', linewidth=2, markersize=8)
+axes[0].set_xlabel('World size')
+axes[0].set_ylabel('CPU RAM (GB)')
+axes[0].set_title('CPU RAM vs World size')
+axes[0].grid(True, alpha=0.3)
+for i, v in enumerate(cpu_ram_train):
+    axes[0].annotate(f'{v:.1f}', (world_sizes[i], v), xytext=(5, 5),
+                     textcoords='offset points', fontsize=9)
+
+axes[1].plot(world_sizes, time_per_10, 'o-', color='#9b59b6', linewidth=2, markersize=8)
+axes[1].set_xlabel('World size')
+axes[1].set_ylabel('Time / 10 steps (s)')
+axes[1].set_title('Training time vs World size')
+axes[1].grid(True, alpha=0.3)
+for i, v in enumerate(time_per_10):
+    axes[1].annotate(f'{v:.1f}s', (world_sizes[i], v), xytext=(5, 5),
+                     textcoords='offset points', fontsize=9)
+
+axes[2].plot(world_sizes, loss, 'o-', color='#e74c3c', linewidth=2, markersize=8)
+axes[2].set_xlabel('World size')
+axes[2].set_ylabel('Loss (step 10)')
+axes[2].set_title('Loss vs World size')
+axes[2].grid(True, alpha=0.3)
+for i, v in enumerate(loss):
+    axes[2].annotate(f'{v:.3f}', (world_sizes[i], v), xytext=(5, 5),
+                     textcoords='offset points', fontsize=9)
+
+plt.suptitle('FSDP2 CPU Scaling (2–8 ranks)', fontsize=14)
+plt.tight_layout()
+plt.savefig('results/figures/fsdp_scaling.png', dpi=150)
+
+
+# FSDP MLflow profiling plot
+fsdp_ws = [2, 3, 4, 8]
+fsdp_comm = [1.93, 2.58, 2.90, 3.38]
+fsdp_fwd = [4.11, 4.37, 4.24, 4.62]
+fsdp_bwd = [1.89, 1.60, 2.33, 3.41]
+fsdp_time_step = [6.42, 6.66, 6.92, 8.39]
+fsdp_loss = [8.62, 4.01, 0.90, 1.56]
+
+fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+
+# Comm volume
+axes[0, 0].plot(fsdp_ws, fsdp_comm, 'o-', color='#e67e22', linewidth=2, markersize=10)
+axes[0, 0].set_xlabel('World size')
+axes[0, 0].set_ylabel('Comm volume (GB)')
+axes[0, 0].set_title('Communication volume per step')
+axes[0, 0].grid(True, alpha=0.3)
+axes[0, 0].set_xticks(fsdp_ws)
+
+# Forward vs Backward
+axes[0, 1].plot(fsdp_ws, fsdp_fwd, 'o-', label='Forward (all-gather)',
+                color='#3498db', linewidth=2, markersize=10)
+axes[0, 1].plot(fsdp_ws, fsdp_bwd, 's-', label='Backward (reduce-scatter)',
+                color='#e74c3c', linewidth=2, markersize=10)
+axes[0, 1].set_xlabel('World size')
+axes[0, 1].set_ylabel('Time (s)')
+axes[0, 1].set_title('Forward vs Backward time')
+axes[0, 1].legend()
+axes[0, 1].grid(True, alpha=0.3)
+axes[0, 1].set_xticks(fsdp_ws)
+
+# Time per step
+axes[1, 0].plot(fsdp_ws, fsdp_time_step, 'o-', color='#9b59b6', linewidth=2, markersize=10)
+axes[1, 0].set_xlabel('World size')
+axes[1, 0].set_ylabel('Time per step (s)')
+axes[1, 0].set_title('Time per step vs World size')
+axes[1, 0].grid(True, alpha=0.3)
+axes[1, 0].set_xticks(fsdp_ws)
+for i, v in enumerate(fsdp_time_step):
+    axes[1, 0].annotate(f'{v:.2f}', (fsdp_ws[i], v), xytext=(5, 8),
+                        textcoords='offset points', fontsize=9)
+
+# Loss
+axes[1, 1].plot(fsdp_ws, fsdp_loss, 'o-', color='#2ecc71', linewidth=2, markersize=10)
+axes[1, 1].set_xlabel('World size')
+axes[1, 1].set_ylabel('Final loss')
+axes[1, 1].set_title('Final loss vs World size')
+axes[1, 1].grid(True, alpha=0.3)
+axes[1, 1].set_xticks(fsdp_ws)
+for i, v in enumerate(fsdp_loss):
+    axes[1, 1].annotate(f'{v:.2f}', (fsdp_ws[i], v), xytext=(5, 8),
+                        textcoords='offset points', fontsize=9)
+
+plt.suptitle('FSDP2 CPU Emulation: MLflow Profiling', fontsize=14)
+plt.tight_layout()
+plt.savefig(OUT_DIR / "fsdp_mlflow.png", dpi=150)
+
 plt.close()
-
-
 print(f"Saved 8 plots to {OUT_DIR}")
