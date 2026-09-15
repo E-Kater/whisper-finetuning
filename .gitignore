@@ -1,0 +1,52 @@
+data/
+raw_audio/
+processed_audio/
+*.wav
+*.mp3
+*.flac
+*.jsonl
+
+# Модели и чекпоинты
+checkpoints/
+whisper-ds-out/
+*.bin
+*.safetensors
+*.pt
+*.ckpt
+
+# HuggingFace cache
+.cache/
+hf_cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+
+# DVC
+.dvc/cache/
+.dvc/tmp/
+
+# Логи
+logs/
+runs/
+*.log
+events.out.tfevents.*
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+raw_transcriptions.json
