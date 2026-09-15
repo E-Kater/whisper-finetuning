@@ -43,6 +43,18 @@ Evaluation on 30 held-out samples. WER measured with `evaluate` (jiwer).
 - **Gradient stability:** DeepSpeedCPUAdam produces stable gradients
   (grad_norm ~2–15) compared to FusedAdam in baseline (grad_norm ~98000).
 
+
+### Visual comparison
+
+![WER by configuration](results/figures/wer_comparison.png)
+
+![VRAM by configuration](results/figures/vram_comparison.png)
+
+![VRAM vs WER tradeoff](results/figures/tradeoff.png)
+
+![Training time by configuration](results/figures/time_comparison.png)
+
+
 ## Hardware
 
 - GPU: NVIDIA GeForce RTX 5080 Laptop (16GB VRAM, sm_120, Blackwell)
