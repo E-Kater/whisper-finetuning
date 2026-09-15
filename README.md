@@ -1,3 +1,4 @@
+
 # Whisper Fine-tuning with DeepSpeed ZeRO-Offload
 
 Fine-tuning Whisper for Russian ASR on a single consumer GPU (RTX 5080 Laptop,
@@ -6,54 +7,87 @@ Fine-tuning Whisper for Russian ASR on a single consumer GPU (RTX 5080 Laptop,
 ## Motivation
 
 Whisper models can exceed the VRAM of a single consumer GPU during full
-fine-tuning. This project demonstrates how DeepSpeed ZeRO Stage 3 with CPU
-offload makes it possible to train a large audio model on one GPU — the same
+fine-tuning. This project demonstrates how DeepSpeed ZeRO with CPU offload
+makes it possible to train a large audio model on one GPU — the same
 sharding mechanics used in multi-GPU training, but with CPU RAM instead of
 additional GPUs.
 
 The goal was to build a reproducible ASR fine-tuning pipeline and compare
-several training configurations (baseline, frozen encoder, ZeRO-3 offload,
-and their combination) in terms of VRAM usage, training time, and WER.
+several training configurations (baseline, frozen encoder, ZeRO-1/2/3 with
+default and tuned communication buffers) in terms of VRAM usage, CPU RAM
+usage, training time, and WER.
 
 ## Results
 
 Training on 270 Russian Common Voice samples, Whisper-small, 3 epochs.
 Evaluation on 30 held-out samples. WER measured with `evaluate` (jiwer).
+All fine-tuning runs use `freeze_encoder()` and `optim="adamw_torch"`.
 
-| Configuration | Max VRAM (GB) | Time | WER |
-|---|---|---|---|
-| Whisper-small, pretrained (no fine-tuning) | — | — | 28.14% |
-| Baseline, 1 epoch | 5.93 | 19 s | 38.40% |
-| Baseline, 3 epochs | 5.94 | 50 s | 31.18% |
-| Baseline + frozen encoder, 3 epochs | 3.98 | 32 s | 30.80% |
-| ZeRO-3 offload, 1 epoch | 2.87 | 42 s | 42.97% |
-| **ZeRO-3 offload + frozen encoder, 3 epochs** | **1.99** | **94 s** | **25.10%** |
+| Configuration | Max VRAM (GB) | Peak CPU RAM (GB) | Time | WER |
+|---|---|---|---|---|
+| Whisper-small, pretrained (no fine-tuning) | — | — | — | 28.14% |
+| Baseline, 3 epochs | 5.94 | — | 50 s | 31.18% |
+| Baseline + frozen encoder, 3 epochs | 3.98 | 9.07 | 32 s | 30.80% |
+| ZeRO-1 + offload, 3 epochs | 2.17 | 12.32 | 41 s | 29.66% |
+| ZeRO-2 + offload (default buffers), 3 epochs | 3.04 | 12.57 | 58 s | 27.38% |
+| **ZeRO-2 + offload (tuned buffers), 3 epochs** | **1.21** | **12.60** | **50 s** | **25.86%** |
+| ZeRO-3 + offload (default buffers), 3 epochs | 1.99 | 13.29 | 102 s | 25.10% |
+| **ZeRO-3 + offload (tuned buffers), 3 epochs** | **0.85** | **13.30** | **86 s** | **28.52%** |
 
 **Key findings:**
 
-- **Best WER: 25.10%** — ZeRO-3 offload + frozen encoder beats the
-  pretrained model (28.14%) and all baseline variants.
-- **Best VRAM: 1.99 GB** — 66% reduction vs baseline (5.93 GB), enabling
-  training on GPUs with as little as 4 GB VRAM.
-- **Tradeoff:** the best configuration is 3× slower than baseline_frozen
-  (94 s vs 32 s) due to CPU offload overhead.
-- **Catastrophic forgetting** in baseline runs: WER worsens from 28.14%
-  (pretrained) to 38.40% (1 epoch). Freezing the encoder and using offload
-  fixes this.
+- **Best VRAM overall: 0.85 GB** — ZeRO-3 with tuned buffers is the
+  absolute minimum, 7× less than baseline (5.94 GB).
+- **Best balance: ZeRO-2 tuned** — 1.21 GB VRAM, 25.86% WER, 50 s,
+  12.60 GB RAM. It gives the best quality-per-GB among offload configs.
+- **Buffer tuning matters more than the ZeRO stage itself.**
+  - ZeRO-2: 3.04 → 1.21 GB (−60%) by reducing `reduce_bucket_size` and
+    `allgather_bucket_size` from 5e8 to 2e7.
+  - ZeRO-3: 1.99 → 0.85 GB (−57%) by reducing
+    `stage3_prefetch_bucket_size` from 5e8 to 5e7.
+- **Tuning can hurt quality.** ZeRO-3 tuned saved 57% VRAM but worsened
+  WER from 25.10% to 28.52% — likely because smaller prefetch buffers
+  slow down parameter access and hurt convergence.
+- **Offload shifts ~2.8 GB from VRAM to CPU RAM:** baseline + frozen
+  uses 3.98 GB VRAM / 9.07 GB RAM, while ZeRO-2 tuned uses 1.21 GB VRAM
+  / 12.60 GB RAM.
+- **Catastrophic forgetting** in baseline: WER worsens from 28.14%
+  (pretrained) to 38.40% (1 epoch). Freezing the encoder fixes this.
 - **Gradient stability:** DeepSpeedCPUAdam produces stable gradients
   (grad_norm ~2–15) compared to FusedAdam in baseline (grad_norm ~98000).
 
+### Tradeoff summary
+
+| Goal | Best configuration | VRAM | WER | Time |
+|---|---|---|---|---|
+| Minimum VRAM | ZeRO-3 tuned | 0.85 GB | 28.52% | 86 s |
+| Best quality/GB | ZeRO-2 tuned | 1.21 GB | 25.86% | 50 s |
+| Best WER | ZeRO-3 default | 1.99 GB | 25.10% | 102 s |
+| Fastest | Baseline + frozen | 3.98 GB | 30.80% | 32 s |
 
 ### Visual comparison
 
-![WER by configuration](results/figures/wer_comparison.png)
+| WER | VRAM |
+|---|---|
+| ![WER](results/figures/wer_comparison.png) | ![VRAM](results/figures/vram_comparison.png) |
 
-![VRAM by configuration](results/figures/vram_comparison.png)
+| CPU RAM | Time |
+|---|---|
+| ![RAM](results/figures/ram_comparison.png) | ![Time](results/figures/time_comparison.png) |
 
-![VRAM vs WER tradeoff](results/figures/tradeoff.png)
+**Tradeoffs:**
 
-![Training time by configuration](results/figures/time_comparison.png)
+| VRAM vs WER | VRAM vs CPU RAM |
+|---|---|
+| ![Tradeoff](results/figures/tradeoff.png) | ![Memory shift](results/figures/tradeoff_memory.png) |
 
+### ZeRO stage comparison
+
+![ZeRO stages](results/figures/zero_stages.png)
+
+### Effect of buffer tuning
+
+![Buffer tuning](results/figures/buffer_tuning.png)
 
 ## Hardware
 
@@ -68,33 +102,36 @@ Evaluation on 30 held-out samples. WER measured with `evaluate` (jiwer).
 - PyTorch 2.12.0.dev+cu128 (nightly, sm_120 support)
 - torchaudio
 - HuggingFace Transformers 4.51.3, Datasets, Evaluate, Accelerate 0.29.3
-- DeepSpeed (ZeRO Stage 3 + CPU offload)
+- DeepSpeed (ZeRO Stage 1/2/3 + CPU offload)
 - soundfile, librosa for audio I/O
 - DVC for data versioning
 - TensorBoard
 - Poetry for dependency management
 
 ## Project structure
-
 ```
 whisper-finetuning/
 ├── configs/
-│   ├── ds_zero3_offload.json    # DeepSpeed ZeRO-3 + CPU offload
-│   └── ds_baseline.json         # DeepSpeed without offload
+│   ├── ds_baseline.json              # DeepSpeed without offload
+│   ├── ds_zero1_offload.json         # ZeRO-1 + CPU offload
+│   ├── ds_zero2_offload.json         # ZeRO-2 + CPU offload (tuned buffers)
+│   ├── ds_zero2_offload_default.json # ZeRO-2 + CPU offload (default buffers)
+│   ├── ds_zero3_offload.json         # ZeRO-3 + CPU offload (default buffers)
+│   └── ds_zero3_offload_tuned.json   # ZeRO-3 + CPU offload (tuned buffers)
 ├── src/
 │   ├── preprocess.py            # Audio preprocessing + manifest creation
 │   ├── dataset.py               # WhisperDataset + DataCollator
 │   ├── train.py                 # Training script
 │   ├── run_eval.py              # WER evaluation
 │   ├── eval_pretrained.py       # WER of pretrained model (baseline)
-│   └── utils.py                 # Logging, seed, VRAM tracking
+│   └── utils.py                 # Logging, seed, VRAM/CPU RAM tracking
 ├── scripts/
 │   ├── download_common_voice.py # Download Common Voice ru subset
-│   ├── run_baseline.sh
-│   └── run_offload.sh
+│   └── make_plots.py            # Generate comparison plots
 ├── data/                        # DVC-tracked (audio + manifests)
 ├── raw_audio/                   # Original WAV files
-├── results/                     # Comparison tables and predictions
+├── results/                     # Comparison tables, plots, predictions
+│   └── figures/                 # Generated plots for README
 └── pyproject.toml
 ```
 
@@ -186,16 +223,29 @@ PYTHONPATH=. poetry run deepspeed --num_gpus=1 src/train.py \
     --num_epochs 3
 ```
 
-**ZeRO-3 offload:**
+**ZeRO-1 / ZeRO-2 / ZeRO-3 (with offload):**
 
 ```bash
+# ZeRO-1
 DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. poetry run deepspeed --num_gpus=1 src/train.py \
-    --deepspeed configs/ds_zero3_offload.json \
-    --output_dir checkpoints/zero3_offload \
+    --deepspeed configs/ds_zero1_offload.json \
+    --output_dir checkpoints/zero1_offload \
+    --num_epochs 3
+
+# ZeRO-2 (tuned buffers)
+DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. poetry run deepspeed --num_gpus=1 src/train.py \
+    --deepspeed configs/ds_zero2_offload.json \
+    --output_dir checkpoints/zero2_offload \
+    --num_epochs 3
+
+# ZeRO-3 (tuned buffers)
+DS_SKIP_CUDA_CHECK=1 PYTHONPATH=. poetry run deepspeed --num_gpus=1 src/train.py \
+    --deepspeed configs/ds_zero3_offload_tuned.json \
+    --output_dir checkpoints/zero3_offload_tuned \
     --num_epochs 3
 ```
 
-**Note:** Both configs use `optim="adamw_torch"` (standard PyTorch AdamW)
+**Note:** All configs use `optim="adamw_torch"` (standard PyTorch AdamW)
 instead of DeepSpeed FusedAdam due to a JIT compilation bug on Blackwell
 GPUs. See Notes and workarounds #8. The encoder is frozen via
 `model.freeze_encoder()` to prevent catastrophic forgetting on small
@@ -216,7 +266,7 @@ poetry run python -m src.eval_pretrained \
 
 ```bash
 poetry run python -m src.run_eval \
-    --model checkpoints/baseline \
+    --model checkpoints/zero2_offload \
     --manifest data/eval_manifest.jsonl \
     --language russian \
     --limit 30
@@ -226,31 +276,43 @@ poetry run python -m src.run_eval \
 To evaluate with HuggingFace `from_pretrained`, gather weights first:
 
 ```bash
-TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 poetry run python checkpoints/zero3_offload/zero_to_fp32.py \
-    checkpoints/zero3_offload \
-    checkpoints/zero3_offload/pytorch_model.bin
+TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1 poetry run python checkpoints/zero3_offload_tuned/zero_to_fp32.py \
+    checkpoints/zero3_offload_tuned \
+    checkpoints/zero3_offload_tuned/pytorch_model.bin
 ```
+
+## Plots
+
+```bash
+poetry run python scripts/make_plots.py
+```
+
+Generates 8 comparison plots in `results/figures/`.
 
 ## What I learned
 
-- How ZeRO Stage 3 shards parameters, gradients, and optimizer states.
-- How CPU offload enables training beyond VRAM limits.
+- How ZeRO Stage 1/2/3 shard parameters, gradients, and optimizer states.
+- How CPU offload enables training beyond VRAM limits, at the cost of
+  CPU RAM and throughput.
 - Why `overlap_comm` and `contiguous_gradients` matter for throughput.
 - How the same sharding mechanics scale to multi-GPU training.
 - Audio preprocessing specifics for Whisper: 16kHz mono, log-mel
   spectrogram, 3000-frame padding.
 - WER as the primary metric for ASR.
-- Combining ZeRO-3 offload with encoder freezing gives the best of both
-  worlds: minimal VRAM (1.99 GB) and best WER (25.10%).
-- Freezing the encoder is critical for small datasets - it prevents
-  catastrophic forgetting of pretrained acoustic features.
-- DeepSpeedCPUAdam (used automatically with offload) produces much more
-  stable gradients than FusedAdam on small datasets.
-- The memory-vs-speed tradeoff is real: the best configuration uses 3×
-  less VRAM but is 3× slower.
-- On small datasets, fine-tuning can hurt: baseline WER grew from 28.14%
-  to 38.40% after 1 epoch. Only the combination of frozen encoder + offload
-  improved over pretrained.
+- **Buffer tuning matters more than the ZeRO stage itself.** Reducing
+  `reduce_bucket_size`, `allgather_bucket_size`, and
+  `stage3_prefetch_bucket_size` from 5e8 to 2e7/5e7 cuts VRAM by 57–60%
+  with no speed penalty (and sometimes a speedup).
+- **Tuning can hurt quality.** ZeRO-3 tuned saved 57% VRAM but worsened
+  WER from 25.10% to 28.52% — smaller prefetch buffers slow down parameter
+  access and hurt convergence.
+- **Best balance is ZeRO-2 tuned:** 1.21 GB VRAM, 25.86% WER, 50 s.
+- **Offload is not free:** it shifts ~2.8 GB from VRAM to CPU RAM and
+  slows down training by 1.5–3×.
+- **Catastrophic forgetting** on small datasets: baseline WER grew from
+  28.14% to 38.40% after 1 epoch. Freezing the encoder fixes this.
+- **Gradient stability:** DeepSpeedCPUAdam produces stable gradients
+  (grad_norm ~2–15) compared to FusedAdam in baseline (grad_norm ~98000).
 
 ## Notes and workarounds
 
@@ -327,7 +389,7 @@ others running modern ML workloads on Blackwell consumer GPUs.
 - **Small dataset:** 270 training samples (~30 minutes of audio) is not
   enough to fully fine-tune Whisper. WER of 25.10% is better than
   pretrained (28.14%), but far from production quality (~10%).
-- **Single GPU:** The project demonstrates ZeRO-3 sharding between GPU and
+- **Single GPU:** The project demonstrates ZeRO sharding between GPU and
   CPU, not between multiple GPUs. The mechanics are the same, but actual
   multi-GPU scaling was not tested.
 - **No audio/video multimodality:** Only audio (ASR) is covered. Video and
