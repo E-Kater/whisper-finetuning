@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "whisper-finetuning"
+version = "0.1.0"
+description = "Fine-tuning Whisper with DeepSpeed ZeRO-3 offload"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+torch = {version = "*", source = "pytorch-cu128"}
+torchaudio = {version = "*", source = "pytorch-cu128"}
+transformers = "^4.40.0"
+datasets = "^2.18.0"
+evaluate = "^0.4.0"
+accelerate = "^0.29.0"
+deepspeed = "^0.14.0"
+soundfile = "^0.12.0"
+librosa = "^0.10.0"
+jiwer = "^3.0.0"
+tensorboard = "^2.16.0"
+dvc = "^3.67.1"
+
+[[tool.poetry.source]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
