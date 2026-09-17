@@ -1,4 +1,4 @@
-# Whisper Fine-tuning with DeepSpeed ZeRO-Offload, FSDP2, and Full Parallelism Spectrum
+# Whisper Fine-tuning with DeepSpeed ZeRO-Offload, FSDP2, and DP/DDP + NCCL vs Gloo Parallelism Benchmarks on 2 x T4 GPUs
 
 Fine-tuning Whisper for Russian ASR on a single consumer GPU (RTX 5080, 16GB VRAM) using DeepSpeed ZeRO with CPU offload and PyTorch FSDP2 CPU emulation. Additionally, provides a full-stack analysis of data parallelism (DP/DDP) and communication layer (NCCL/Gloo) on 2×T4 GPUs (Kaggle).
 
