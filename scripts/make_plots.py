@@ -360,5 +360,90 @@ plt.suptitle('FSDP2 CPU Emulation: MLflow Profiling', fontsize=14)
 plt.tight_layout()
 plt.savefig(OUT_DIR / "fsdp_mlflow.png", dpi=150)
 
-plt.close()
-print(f"Saved 8 plots to {OUT_DIR}")
+
+
+# === Data from experiments ===
+WORLD_SIZES = [2, 3, 4, 8]
+
+# CPU RAM (GB)
+CPU_RAM_WRAP = [7.80, 8.63, 9.68, 13.47]      # after fully_shard
+CPU_RAM_TRAIN = [11.40, 13.88, 15.97, 21.59]  # after training
+
+# Time per 10 steps (seconds)
+TIME_10_STEPS = [63.7, 65.8, 68.5, 83.2]
+
+# Loss at step 10
+LOSS_STEP_10 = [0.4840, 0.6485, 0.6032, 1.1088]
+
+
+def main():
+    os.makedirs("results/figures", exist_ok=True)
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    # === 1. CPU RAM vs world size ===
+    ax = axes[0]
+    x = np.arange(len(WORLD_SIZES))
+    width = 0.35
+
+    bars1 = ax.bar(x - width / 2, CPU_RAM_WRAP, width,
+                   label="After FSDP wrap", color="#3498db",
+                   edgecolor="black", linewidth=0.5)
+    bars2 = ax.bar(x + width / 2, CPU_RAM_TRAIN, width,
+                   label="After training", color="#e74c3c",
+                   edgecolor="black", linewidth=0.5)
+
+    ax.set_xlabel("World size (ranks)", fontsize=11)
+    ax.set_ylabel("CPU RAM (GB)", fontsize=11)
+    ax.set_title("CPU RAM vs World size", fontsize=12)
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"ws={w}" for w in WORLD_SIZES])
+    ax.legend(loc="upper left")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, h + 0.3,
+                    f"{h:.2f}", ha="center", va="bottom", fontsize=8)
+
+    # === 2. Time per 10 steps vs world size ===
+    ax = axes[1]
+    ax.plot(WORLD_SIZES, TIME_10_STEPS, "o-",
+            color="#9b59b6", linewidth=2, markersize=10)
+    ax.set_xlabel("World size (ranks)", fontsize=11)
+    ax.set_ylabel("Time / 10 steps (s)", fontsize=11)
+    ax.set_title("Training time vs World size", fontsize=12)
+    ax.set_xticks(WORLD_SIZES)
+    ax.grid(True, alpha=0.3)
+
+    for i, v in enumerate(TIME_10_STEPS):
+        ax.annotate(f"{v:.1f}s", (WORLD_SIZES[i], v),
+                    xytext=(5, 8), textcoords="offset points", fontsize=9)
+
+    # === 3. Loss at step 10 vs world size ===
+    ax = axes[2]
+    ax.plot(WORLD_SIZES, LOSS_STEP_10, "o-",
+            color="#e74c3c", linewidth=2, markersize=10)
+    ax.set_xlabel("World size (ranks)", fontsize=11)
+    ax.set_ylabel("Loss at step 10", fontsize=11)
+    ax.set_title("Loss vs World size", fontsize=12)
+    ax.set_xticks(WORLD_SIZES)
+    ax.grid(True, alpha=0.3)
+
+    for i, v in enumerate(LOSS_STEP_10):
+        ax.annotate(f"{v:.3f}", (WORLD_SIZES[i], v),
+                    xytext=(5, 8), textcoords="offset points", fontsize=9)
+
+    # Add annotation about gloo divergence
+    ax.axhline(y=0.48, color="gray", linestyle="--", linewidth=1,
+               label="Best loss (ws=2)")
+    ax.legend(loc="upper left")
+
+    plt.suptitle("FSDP2 CPU Scaling Study (2–8 ranks, gloo backend)",
+                 fontsize=14, fontweight="bold")
+    plt.tight_layout()
+
+    out_path = "results/figures/fsdp_scaling.png"
+    plt.savefig(out_path, dpi=150)
+    plt.close()
