@@ -6,12 +6,12 @@ Fine-tuning Whisper for Russian ASR on a single consumer GPU (RTX 5080, 16GB VRA
 
 Whisper models can exceed the VRAM of a single consumer GPU during full fine-tuning. This project explores **the full spectrum of distributed training** on limited hardware:
 
-1. **Data Parallelism (DP/DDP)** — baseline multi-GPU training with NCCL.
+1. **Data Parallelism (DP/DDP)** - baseline multi-GPU training with NCCL.
 2. **DeepSpeed ZeRO** (memory-centric): shards optimizer state, gradients, and parameters across devices, with optional CPU offload.
 3. **PyTorch FSDP2** (PyTorch-native): shards parameters, gradients, and optimizer using `fully_shard` and `DeviceMesh`.
 4. **Communication Layer** (NCCL/Gloo): real bandwidth benchmarks on 2×T4.
 
-The goal was to build a reproducible ASR fine-tuning pipeline, compare several training configurations in terms of VRAM, CPU RAM, time, and WER, and **analyze the communication layer** that underlies all distributed training.
+The goal was to build a reproducible ASR fine-tuning pipeline, compare several training configurations in terms of VRAM, CPU RAM, time, and WER, and analyze the communication layer that underlies all distributed training.
 
 ## Experiment design
 

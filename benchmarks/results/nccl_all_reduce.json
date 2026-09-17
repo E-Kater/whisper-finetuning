@@ -1,0 +1,51 @@
+{
+  "operation": "all_reduce",
+  "gpus": 2,
+  "data": [
+    {
+      "size_bytes": 1048576,
+      "size_mb": 1.048576,
+      "busbw_gbps": 3.12
+    },
+    {
+      "size_bytes": 2097152,
+      "size_mb": 2.097152,
+      "busbw_gbps": 3.48
+    },
+    {
+      "size_bytes": 4194304,
+      "size_mb": 4.194304,
+      "busbw_gbps": 3.63
+    },
+    {
+      "size_bytes": 8388608,
+      "size_mb": 8.388608,
+      "busbw_gbps": 3.77
+    },
+    {
+      "size_bytes": 16777216,
+      "size_mb": 16.777216,
+      "busbw_gbps": 3.77
+    },
+    {
+      "size_bytes": 33554432,
+      "size_mb": 33.554432,
+      "busbw_gbps": 3.75
+    },
+    {
+      "size_bytes": 67108864,
+      "size_mb": 67.108864,
+      "busbw_gbps": 3.77
+    },
+    {
+      "size_bytes": 134217728,
+      "size_mb": 134.217728,
+      "busbw_gbps": 3.77
+    },
+    {
+      "size_bytes": 268435456,
+      "size_mb": 268.435456,
+      "busbw_gbps": 3.77
+    }
+  ]
+}
